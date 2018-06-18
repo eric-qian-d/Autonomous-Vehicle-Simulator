@@ -211,6 +211,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 		# LpSolverDefault.msg = 1
 		model.solve()
+		
 		for var in model.variables():
 			first_start = var.name.find('(') + 1 #13
 			first_end = var.name.find(',') - 1
@@ -391,8 +392,8 @@ def point_dist(p1, p2):
 	return math.sqrt(x_d**2 + y_d**2)
 
 #Where you can choose inputs - NOTE VEHICLES MUST BE GREATER THAN PASSENGERS:
-number_of_passengers = 1
-number_of_vehicles = 10
+number_of_passengers = 2
+number_of_vehicles = 2
 vehicle_speed = 5
 x_size = 40
 y_size = 40
