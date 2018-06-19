@@ -1,4 +1,4 @@
-from pulp import *
+import cplex
 import math
 import random
 import numpy as np
@@ -155,62 +155,86 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 
 		#Create new model for |R'| < |V'|
-		model = ''
-		model = pulp.LpProblem('R_lessthan_V_' + str(t), LpMinimize)		
+		problem = cplex.Cplex()
+    		problem.objective.set_sense(problem.objective.sense.maximize)
 
 		#Set variables to optimize
-		x = pulp.LpVariable.dicts('single_ride_' + str(t), ((i.num, j.num) for i in R_prime for j in V_prime), cat = 'Binary')
-		x_prime = pulp.LpVariable.dicts('shared_ride_' + str(t), ((i.num, j.num) for i in R_prime for j in V_prime), cat = 'Binary')
+		obj = []
+		lb = []
+		ub = []
+		names = []
+		variable_types = []
 
-		#Set objective function
-		model += (pulp.lpSum([pulp.lpSum([[x[(i.num, j.num)] * (d[i.num][j.num] + phi * p[j.num])]
-		+ [x_prime[(i.num, j.num)] * rideshare_pen[i.num][j.num][0]]
-		+ [delta * q[j.num] * (x[(i.num, j.num)] + x_prime[(i.num, j.num)]) * (1 - y[i.num][j.num])]
-		for i in R_prime]) for j in V_prime])), 'wait_cost_' + str(t)
+		for i in R_prime:
+			for j in v_prime:
+				names.append('x({0},{1})'.format(i.num, j.num)))
+				obj.append(d[i.num][j.num] + phi * p[j.num]) + delta * q[j.num] * (1 - y[i.num][j.num]))
+				lb.append(0)
+				ub.append(1)
+				variable_types.append("B")
+				
+				names.append('x_prime({0}, {1})'.format(i.num, j.num)))
+				obj.append(rideshare_pen[i.num][j.num][0] + delta * q[j.num] * (1 - y[i.num][j.num]))
+				lb.append(0)
+				ub.append(1)
+				variable_types.append("B")
 
 		#Set constraints
+		constraint_names = []
+		constraints = []
+		constraint_rhs = []
+		constraint_sense = []
+
 		for j in V_prime:
-			label = 'rideshare_pass_constraint_time%d_v%d' % (t, j.num)
-			condition = p[j.num] >= pulp.lpSum([[x_prime[(i.num, j.num)]] for i in R_prime]) #passenger 1 before 2 ride-share
-			model += condition, label
-
-			label_single = 'one_max_single_time%d_v%d' % (t, j.num)
-			label_shared = 'one_max_shared_time%d_v%d' % (t, j.num)
-			condition_single = pulp.lpSum([[x[(i.num, j.num)]] for i in R_prime]) <= 1 #cap the number of single rides for each vehicle
-			condition_shared = pulp.lpSum([[x_prime[(i.num, j.num)]] for i in R_prime]) <= 1 #cap the number of ride shares for each vehicle
-			model += condition_single, label_single
-			model += condition_shared, label_shared
-
-		for i in R_prime:
-			label = 'all_assigned_time%d_p%d' % (t, i.num)
-			condition = pulp.lpSum([[x[(i.num, j.num)]] + [x_prime[(i.num, j.num)]] for j in V_prime]) == 1 #every passenger is assigned
-			model += condition, label
-
-		for i in R_prime:
-			for j in V_prime:
-				label_single = 'nonneg_single_time%d_p%d_i%d' % (t, i.num, j.num)
-				label_shared = 'nonneg_shared_time%d_p%d_i%d' % (t, i.num, j.num)
-				condition_single = x[(i.num, j.num)] >= 0 #nonnegative single rides
-				condition_shared = x_prime[(i.num, j.num)] >= 0 #nonnegative ride shares
-				model += condition_single, label_single
-				model += condition_shared, label_shared
-
+			#makes sure that there's already passenger 1 before rideshare is assigned
+			new_rideshare_constraint = [[], []]
+			for i in R_prime:
+				new_rideshare_constraint[0].append('x({0},{1})'.format(i.num, j.num))
+				new_rideshare_constraint[1].append(1)
+				
+			constraint_names.append('initial_rider_constraint_{0}'.format(j.num))
+			constraints.append(new_rideshare_constraint)
+			constraint_rhs.append(p[j.num])
+			constraint_sense.append('L')
+			
+			#makes sure that every passenger is assigned to exactly 1 vehicle since |R| < |V|
+			passenger_assigned_constraint = [[], []]
+			for i in R_prime:
+				passenger_assigned_constraint[0].append('x({0},{1})'.format(i.num, j.num))
+				passenger_assigned_constraint[1].append(1)
+				passenger_assigned_constraint[0].append('x_prime({0},{1})'.format(i.num, j.num))
+				passenger_assigned_constraint[1].append(1)
+				
+			constraint_names.append('passenger_{0}_assigned_constraint'.format(i.num))
+			constants.append(passenger_assigned_constraint)
+			constraint_rhs.append(1)
+			constraint_sense.append('E')
+			
+			
 		for i in R_A:
-			label = 'stay_assigned_time%d_p%d' % (t, i.num)
-			condition = pulp.lpSum([x[(i.num, j.num)]] + [x_prime[(i.num, j.num)]]) #prevents assigned -> unassigned
-			model += condition, label
-
+			
+			#only one standard reassignment
+			one_standard_reassignment_constraint = [[], []]
 			for j in V_P:
-				label_single = 'reassign_single_time%d_p%d_i%d' % (t, i.num, j.num)
-				label_shared = 'reassign_shared_time%d_p%d_i%d' % (t, i.num, j.num)
-				condition_single = b[i.num] * (y[i.num][j.num] - x[(i.num,j.num)]) <= 0  #prevents more than 1 reassignment
-				condition_shared = b[i.num] * (y[i.num][j.num] - x_prime[(i.num,j.num)]) <= 0  #prevents more than 1 reassignment
-				model += condition_single, label_single
-				model += condition_shared, label_shared
-
-
-		# LpSolverDefault.msg = 1
-		model.solve()
+				one_standard_reassignment_constraint[0].append(b[i.num] 
+				one_standard_reassignment_constraint[1].append(y[i.num][j.num])
+				one_standard_reassignment_constraint[0].append('x({0},{1})'.format(i.num, j.num))
+				one_standard_reassignment_constraint[1].append(-1)
+			
+			constraint_names.append('passenger_{}_one_standard_reassignment'.format(i.num))
+			
+			#only one rideshare reassignment
+			one_standard_reassignment_constraint = [[], []]
+			for j in V_P:
+				one_standard_reassignment_constraint[0].append(b[i.num] 
+				one_standard_reassignment_constraint[1].append(y[i.num][j.num])
+				one_standard_reassignment_constraint[0].append('x_prime({0},{1})'.format(i.num, j.num))
+				one_standard_reassignment_constraint[1].append(-1)
+			
+			constraint_names.append('passenger_{}_one_rideshare_reassignment'.format(i.num))
+	
+		problem.write('ericlp.txt')
+		problem.solve()
 		
 		for var in model.variables():
 			first_start = var.name.find('(') + 1 #13
