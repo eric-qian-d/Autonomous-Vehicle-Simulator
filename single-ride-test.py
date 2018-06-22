@@ -19,7 +19,6 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		v_done, r_done = [], []
 		for vehicle in V_D:
 			passenger = R[vehicle.passengers[vehicle.serving]]
-			# print('vehicle ', vehicle, ' dropping off passenger ', passenger)
 			if dist_to_d(passenger, vehicle) < distance_travel:
 				vehicle.x, vehicle.y = passenger.d[0], passenger.d[1]
 				v_done.append(vehicle)
@@ -59,6 +58,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			R_IV.remove(passenger)
 			R_S.add(passenger)
 			passenger.state = 'served'
+			passenger.vehicle = None
 
 	def update_assigned(R, R_A, R_IV, V_P, V_D):
 		if len(R_A) == 0: return
@@ -96,15 +96,17 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			R_prime.remove(passenger)
 			passenger.state = 'in vehicle'
 
-	# def update_unassigned():
-	# 	if len(R_U) < 1: return
-	# 	solve_R_lessthan_V()
+	def update_unassigned(R, R_A, R_IV, R_prime, V, V_P, V_prime, t):
+		if len(R_U) < 1: return
+		solve_R_greaterthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t) if len(R_prime) >= len(V_prime) else solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t)
+
 
 	def solve_R_greaterthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t):
 		if len(R_prime) < 1: return
 
 		#Initialize variables
 		d, y = [[0 for j in range(num_vehicles)] for i in range(num_passengers)], [[0 for j in range(num_vehicles)] for i in range(num_passengers)] 
+		x_prev, x_prime_prev = [[0 for j in range(num_vehicles)] for i in range(num_passengers)], [[0 for j in range(num_vehicles)] for i in range(num_passengers)] 
 		d11, d12, d21, rideshare_pen = [[0 for j in range(num_vehicles)] for i in range(num_passengers)], [[0 for j in range(num_vehicles)] for i in range(num_passengers)], [[0 for j in range(num_vehicles)] for i in range(num_passengers)], [[0 for j in range(num_vehicles)] for i in range(num_passengers)]
 		p, q = [0] * len(V), [0] * len(V)
 		b, w = [0] * len(R), [0] * len(R)
@@ -117,8 +119,10 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 				y[i][j] = 0
 				if R[i].vehicle == j:
 					y[i][j] = 1
-					# if V[j] in V_P:
-					# 	y[i][j] = 1
+					if V[j].passengers[0] == i:
+						x_prev[i][j] = 1
+					else:
+						x_prime_prev[i][j] = 1
 
 				if V[j] in V_D:
 					d[i][j] = dist_to_d(R[V[j].passengers[V[j].serving]], V[j]) + point_dist(R[V[j].passengers[V[j].serving]].d, R[i].o)
@@ -144,6 +148,8 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		for i in range(num_passengers):
 			b[i] = R[i].reassigned
 			w[i] = R[i].wait
+
+		rides_to_assign = min(len(R_prime), len(V_prime) + len(V_D))
 
 		#Create new model for |R'| > |V'|
 		problem = cplex.Cplex()
@@ -219,7 +225,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 				
 			constraint_names.append('passenger_{0}_assigned_constraint'.format(i.num))
 			constraints.append(passenger_assigned_constraint)
-			constraint_rhs.append(1)
+			constraint_rhs.append(1.01)
 			constraint_sense.append('L')
 			
 		#only one reassignment
@@ -240,16 +246,34 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		#may need to generate a separate list of xij and x'ij lists to make sure that this is guaranteed to not change; working off comparisons with y list may not work
 		for i in R_prime:
 			for j in V_D:
-				no_kick_out_constraint = [[], []]
-				no_kick_out_constraint[0].append('x({0},{1})'.format(i.num, j.num))
-				no_kick_out_constraint[1].append(1)
-				no_kick_out_constraint[0].append('x_prime({0},{1})'.format(i.num, j.num))
-				no_kick_out_constraint[1].append(1)
-
-				constraint_names.append('passenger_{0}_in_vehicle_{1}_no_swap'.format(i.num, j.num))
-				constraints.append(no_kick_out_constraint)
-				constraint_rhs.append(y[i.num][j.num])
+				no_kick_out_constraint_x = [[], []]
+				no_kick_out_constraint_x[0].append('x({0},{1})'.format(i.num, j.num))
+				no_kick_out_constraint_x[1].append(1)
+				constraint_names.append('passenger_{0}_in_vehicle_{1}_no_swap_x'.format(i.num, j.num))
+				constraints.append(no_kick_out_constraint_x)
+				constraint_rhs.append(x_prev[i.num][j.num])
 				constraint_sense.append('E')
+
+				no_kick_out_constraint_x_prime = [[], []]
+				no_kick_out_constraint_x_prime[0].append('x_prime({0},{1})'.format(i.num, j.num))
+				no_kick_out_constraint_x_prime[1].append(1)
+				constraint_names.append('passenger_{0}_in_vehicle_{1}_no_swap_x_prime'.format(i.num, j.num))
+				constraints.append(no_kick_out_constraint_x_prime)
+				constraint_rhs.append(x_prime_prev[i.num][j.num])
+				constraint_sense.append('E')
+
+		#makes sure vehicles actually pick up passengers
+		actually_pick_up_constraint = [[], []]
+		for i in R_prime:
+			for j in V_prime:
+				actually_pick_up_constraint[0].append('x({0},{1})'.format(i.num, j.num))
+				actually_pick_up_constraint[1].append(1)
+				actually_pick_up_constraint[0].append('x_prime({0},{1})'.format(i.num, j.num))
+				actually_pick_up_constraint[1].append(1)
+		constraint_names.append('actually_picking_people_up')
+		constraints.append(actually_pick_up_constraint)
+		constraint_rhs.append(rides_to_assign)
+		constraint_sense.append('E')
 
 
 		problem.variables.add(obj = obj, lb = lb, ub = ub, names = names, types = variable_types)
@@ -350,6 +374,9 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 					vehicle.picking_up = 1
 					vehicle.serving = 0 if rideshare_pen[p][v][1] == 0 else 1
 
+		for passenger in R_U:
+			passenger.wait += time_interval
+
 	def solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t):
 		if len(R_prime) < 1: return
 
@@ -368,7 +395,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 				y[i][j] = 0
 				if R[i].vehicle == j:
 					y[i][j] = 1
-					if V[j].passengers[0] == R[i].num:
+					if V[j].passengers[0] == i:
 						x_prev[i][j] = 1
 					else:
 						x_prime_prev[i][j] = 1
@@ -377,8 +404,6 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 					d[i][j] = dist_to_d(R[V[j].passengers[V[j].serving]], V[j]) + point_dist(R[V[j].passengers[V[j].serving]].d, R[i].o)
 				else:
 					d[i][j] = distance(R[i], V[j])
-
-
 
 		for i in range(num_passengers):
 			for j in range(num_vehicles):
@@ -398,6 +423,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 		for i in range(num_passengers):
 			b[i] = R[i].reassigned
+
 
 		#Verifying that things were initialized properly
 
@@ -514,15 +540,20 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		#may need to generate a separate list of xij and x'ij lists to make sure that this is guaranteed to not change; working off comparisons with y list may not work
 		for i in R_prime:
 			for j in V_D:
-				no_kick_out_constraint = [[], []]
-				no_kick_out_constraint[0].append('x({0},{1})'.format(i.num, j.num))
-				no_kick_out_constraint[1].append(1)
-				no_kick_out_constraint[0].append('x_prime({0},{1})'.format(i.num, j.num))
-				no_kick_out_constraint[1].append(1)
+				no_kick_out_constraint_x = [[], []]
+				no_kick_out_constraint_x[0].append('x({0},{1})'.format(i.num, j.num))
+				no_kick_out_constraint_x[1].append(1)
+				constraint_names.append('passenger_{0}_in_vehicle_{1}_no_swap_x'.format(i.num, j.num))
+				constraints.append(no_kick_out_constraint_x)
+				constraint_rhs.append(x_prev[i.num][j.num])
+				constraint_sense.append('E')
 
-				constraint_names.append('passenger_{0}_in_vehicle_{1}_no_swap'.format(i.num, j.num))
-				constraints.append(no_kick_out_constraint)
-				constraint_rhs.append(y[i.num][j.num])
+				no_kick_out_constraint_x_prime = [[], []]
+				no_kick_out_constraint_x_prime[0].append('x_prime({0},{1})'.format(i.num, j.num))
+				no_kick_out_constraint_x_prime[1].append(1)
+				constraint_names.append('passenger_{0}_in_vehicle_{1}_no_swap_x_prime'.format(i.num, j.num))
+				constraints.append(no_kick_out_constraint_x_prime)
+				constraint_rhs.append(x_prime_prev[i.num][j.num])
 				constraint_sense.append('E')
 
 
@@ -687,7 +718,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			if vehicle.next is not None:
 				print(vehicle, ' ', vehicle.num, ' will eventually pick up ', R[p], ' ', R[p].num)
 
-		solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t)
+		update_unassigned(R, R_A, R_IV, R_prime, V, V_P, V_prime, t)
 		t += t_int
 		for passenger in R:
 			if passenger.appear <= t and passenger.appear > t - t_int:
@@ -696,6 +727,8 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 		if len(R_S) == len(R):
 			break
+
+	print('finished')
 
 class Passenger:
 	def __init__(self, num, x_max, y_max, time_horizon):
@@ -709,7 +742,7 @@ class Passenger:
 		self.reassigned = 0
 		self.wait = 0
 		self.appear = random.random() * time_horizon * 0.3
-		# self.appear = 0 #for testing
+		self.appear = 0 #for testing
 
 class Vehicle:
 	def __init__(self, num, x_max, y_max):
@@ -738,8 +771,8 @@ def point_dist(p1, p2):
 	return math.sqrt(x_d**2 + y_d**2)
 
 #Choose inputs here:
-number_of_passengers = 15
-number_of_vehicles = 10
+number_of_passengers = 2
+number_of_vehicles = 1
 vehicle_speed = 60. #kmh 55 default
 x_size = 10. #km
 y_size = 10. #km
