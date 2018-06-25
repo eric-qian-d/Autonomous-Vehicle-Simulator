@@ -13,93 +13,6 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 	#need to still account for the d variable for passenger 1's
 
-	def update_in_vehicle(R, R_IV, R_S, V_I, V_D): #need to consider order of dropoff for rideshares; FIX!
-		if len(R_IV) == 0: return
-		print('In the in vehicle update function')
-		v_done, r_done = [], []
-		for vehicle in V_D:
-			passenger = R[vehicle.passengers[vehicle.serving]]
-			if dist_to_d(passenger, vehicle) < distance_travel:
-				vehicle.x, vehicle.y = passenger.d[0], passenger.d[1]
-				v_done.append(vehicle)
-				r_done.append(passenger)
-			else:
-				x_comp = abs(vehicle.x - passenger.d[0])/(abs(vehicle.x - passenger.d[0]) + abs(vehicle.y - passenger.d[1]))
-				y_comp = 1 - x_comp
-				theta = math.atan(y_comp/x_comp)
-				dx = np.sign(passenger.d[0] - vehicle.x) * math.cos(theta) * distance_travel
-				dy = np.sign(passenger.d[1] - vehicle.y) * math.sin(theta) * distance_travel
-				vehicle.x += dx
-				vehicle.y += dy
-			for p in vehicle.passengers:
-				if R[p] in R_IV:
-					R[p].x, R[p].y = vehicle.x, vehicle.y
-
-		for vehicle in v_done:
-			V_D.remove(vehicle)
-			vehicle.passengers.pop(vehicle.serving)
-			if len(vehicle.passengers)  == 1:
-				V_D.add(vehicle)
-				vehicle.serving = 0
-			else:
-				if vehicle.next is not None:
-					vehicle.serving = 0
-					vehicle.passengers = [vehicle.next]
-					vehicle.picking_up = 0
-					vehicle.next = None
-					V_P.add(vehicle)
-					vehicle.state = 'drop off'
-				else:
-					V_I.add(vehicle)
-					vehicle.serving = None
-					vehicle.state = 'idle'
-
-		for passenger in r_done:
-			R_IV.remove(passenger)
-			R_S.add(passenger)
-			passenger.state = 'served'
-			passenger.vehicle = None
-
-	def update_assigned(R, R_A, R_IV, V_P, V_D):
-		if len(R_A) == 0: return
-		print('In the assigned update function')
-		v_done, r_done = [], []
-		for vehicle in V_P:
-			print(vehicle.num, vehicle.passengers, vehicle.next, vehicle.serving, vehicle.picking_up)
-			passenger = R[vehicle.passengers[vehicle.picking_up]]
-			if distance(passenger, vehicle) < distance_travel:
-				vehicle.x, vehicle.y = passenger.o[0], passenger.o[1]
-				v_done.append(vehicle)
-				r_done.append(passenger)
-			else:
-				x_comp = abs(vehicle.x - passenger.o[0])/(abs(vehicle.x - passenger.o[0]) + abs(vehicle.y - passenger.o[1]))
-				y_comp = 1 - x_comp
-				theta = math.atan(y_comp/x_comp)
-				dx = np.sign(passenger.o[0] - vehicle.x) * math.cos(theta) * distance_travel
-				dy = np.sign(passenger.o[1] - vehicle.y) * math.sin(theta) * distance_travel
-				vehicle.x += dx
-				vehicle.y += dy
-			for p in vehicle.passengers:
-				if R[p] in R_IV:
-					R[p].x, R[p].y = vehicle.x, vehicle.y
-
-		for vehicle in v_done:
-			V_P.remove(vehicle)
-			V_D.add(vehicle)
-			vehicle.state = 'drop off'
-			vehicle.picking_up = None
-
-		for passenger in r_done:
-			print('removing passenger ', passenger, '   #', passenger.num )
-			R_A.remove(passenger)
-			R_IV.add(passenger)
-			R_prime.remove(passenger)
-			passenger.state = 'in vehicle'
-
-	def update_unassigned(R, R_A, R_IV, R_prime, V, V_P, V_prime, t):
-		if len(R_U) < 1: return
-		solve_R_greaterthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t) if len(R_prime) >= len(V_prime) else solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t)
-
 
 	def solve_R_greaterthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t):
 		if len(R_prime) < 1: return
@@ -322,7 +235,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 								V_D.add(V[passenger.vehicle])
 								V_P.remove(V[passenger.vehicle])
 								V[passenger.vehicle].picking_up = None
-								V[passenger.vehicle].state = 'drop off'
+								V[passenger.vehicle].state = 'dropping off'
 								V[passenger.vehicle].passengers.pop(1)
 								V[passenger.vehicle].serving = 0
 						else: #reassigned passenger must've come from a vehicle in V_D
@@ -356,7 +269,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 						vehicle.passengers = [p]
 						vehicle.picking_up = 0
 						vehicle.serving = 0
-						vehicle.state = 'picking_up'
+						vehicle.state = 'picking up'
 													
 					else: #passenger will be picked up after the next passenger is dropped off
 						vehicle.next = p
@@ -377,8 +290,110 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		for passenger in R_U:
 			passenger.wait += time_interval
 
+
+
+
+
+
+
+
+
+
+
+
+	def update_in_vehicle(R, R_IV, R_S, V_I, V_D): #need to consider order of dropoff for rideshares; FIX!
+		if len(R_IV) == 0: return
+		print('In the in vehicle update function')
+		v_done, r_done = [], []
+		for vehicle in V_D:
+			passenger = R[vehicle.passengers[vehicle.serving]]
+			if dist_to_d(passenger, vehicle) < distance_travel:
+				vehicle.x, vehicle.y = passenger.d[0], passenger.d[1]
+				v_done.append(vehicle)
+				r_done.append(passenger)
+			else:
+				x_comp = abs(vehicle.x - passenger.d[0])/(abs(vehicle.x - passenger.d[0]) + abs(vehicle.y - passenger.d[1]))
+				y_comp = 1 - x_comp
+				theta = math.atan(y_comp/x_comp)
+				dx = np.sign(passenger.d[0] - vehicle.x) * math.cos(theta) * distance_travel
+				dy = np.sign(passenger.d[1] - vehicle.y) * math.sin(theta) * distance_travel
+				vehicle.x += dx
+				vehicle.y += dy
+			for p in vehicle.passengers:
+				if R[p] in R_IV:
+					R[p].x, R[p].y = vehicle.x, vehicle.y
+
+		for vehicle in v_done:
+			V_D.remove(vehicle)
+			vehicle.passengers.pop(vehicle.serving)
+			if len(vehicle.passengers)  == 1:
+				V_D.add(vehicle)
+				vehicle.serving = 0
+			else:
+				if vehicle.next is not None:
+					vehicle.serving = 0
+					vehicle.passengers = [vehicle.next]
+					vehicle.picking_up = 0
+					vehicle.next = None
+					V_P.add(vehicle)
+					vehicle.state = 'dropping off'
+				else:
+					V_I.add(vehicle)
+					vehicle.serving = None
+					vehicle.state = 'idle'
+
+		for passenger in r_done:
+			print(passenger, passenger.num, 'dropped off')
+			R_IV.remove(passenger)
+			R_S.add(passenger)
+			passenger.state = 'served'
+			passenger.vehicle = None
+
+	def update_assigned(R, R_A, R_IV, V_P, V_D):
+		if len(R_A) == 0: return
+		print('In the assigned update function')
+		v_done, r_done = [], []
+		for vehicle in V_P:
+			# print(vehicle.num, vehicle.passengers, vehicle.next, vehicle.serving, vehicle.picking_up, R[vehicle.passengers[0]].vehicle)
+			passenger = R[vehicle.passengers[vehicle.picking_up]]
+			if distance(passenger, vehicle) < distance_travel:
+				vehicle.x, vehicle.y = passenger.o[0], passenger.o[1]
+				v_done.append(vehicle)
+				r_done.append(passenger)
+			else:
+				x_comp = abs(vehicle.x - passenger.o[0])/(abs(vehicle.x - passenger.o[0]) + abs(vehicle.y - passenger.o[1]))
+				y_comp = 1 - x_comp
+				theta = math.atan(y_comp/x_comp)
+				dx = np.sign(passenger.o[0] - vehicle.x) * math.cos(theta) * distance_travel
+				dy = np.sign(passenger.o[1] - vehicle.y) * math.sin(theta) * distance_travel
+				vehicle.x += dx
+				vehicle.y += dy
+			for p in vehicle.passengers:
+				if R[p] in R_IV:
+					R[p].x, R[p].y = vehicle.x, vehicle.y
+
+		for vehicle in v_done:
+			V_P.remove(vehicle)
+			V_D.add(vehicle)
+			vehicle.state = 'dropping off'
+			vehicle.picking_up = None
+
+		for passenger in r_done:
+			# print('removing passenger ', passenger, '   #', passenger.num )
+			print(passenger, passenger.num, 'picked up')
+			R_A.remove(passenger)
+			R_IV.add(passenger)
+			R_prime.remove(passenger)
+			passenger.state = 'in vehicle'
+
+	def update_unassigned(R, R_A, R_IV, R_prime, V, V_P, V_prime, t):
+		if len(R_U) < 1: return
+		solve_R_greaterthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t) if len(R_prime) >= len(V_prime) else solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t)
+
+
 	def solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t):
 		if len(R_prime) < 1: return
+		R_joined = R_prime.union(R_IV)
 
 		#Initialize variables
 		d, y = [[0 for j in range(num_vehicles)] for i in range(num_passengers)], [[0 for j in range(num_vehicles)] for i in range(num_passengers)] 
@@ -395,10 +410,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 				y[i][j] = 0
 				if R[i].vehicle == j:
 					y[i][j] = 1
-					if V[j].passengers[0] == i:
-						x_prev[i][j] = 1
-					else:
-						x_prime_prev[i][j] = 1
+					print(i, j)
 
 				if V[j] in V_D:
 					d[i][j] = dist_to_d(R[V[j].passengers[V[j].serving]], V[j]) + point_dist(R[V[j].passengers[V[j].serving]].d, R[i].o)
@@ -424,6 +436,15 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		for i in range(num_passengers):
 			b[i] = R[i].reassigned
 
+		for passenger in R_IV:
+			v = passenger.vehicle
+			vehicle = V[v]
+			print('test', passenger.num, v)
+			if len(vehicle.passengers) == 1 or passenger.num == vehicle.passengers[0]:
+				x_prev[passenger.num][v] = 1
+			else:
+				x_prime_prev[passenger.num][v] = 1
+
 
 		#Verifying that things were initialized properly
 
@@ -440,10 +461,12 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		# for j in range(num_vehicles):
 		# 	print(q[j])
 
-		print('checking d')
-		for i in range(num_passengers):
-			for j in range(num_vehicles):
-				print('pass ', i, 'veh ', j, ': ', d[i][j])
+		# print('checking d')
+		# for i in range(num_passengers):
+		# 	for j in range(num_vehicles):
+		# 		print('pass ', i, 'veh ', j, ': ', d[i][j])
+
+
 
 		#Create new model for |R'| < |V'|
 		problem = cplex.Cplex()
@@ -456,25 +479,38 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		names = []
 		variable_types = []
 
-		for i in R_prime:
+		for i in R_joined:
 			for j in V_prime:
 				names.append('x({0},{1})'.format(i.num, j.num))
 				obj.append(d[i.num][j.num] + phi * p[j.num] + delta * q[j.num] * (1 - y[i.num][j.num]))
 				lb.append(0)
 				ub.append(1)
-				variable_types.append("B")
+				variable_types.append("C")
 				
 				names.append('x_prime({0},{1})'.format(i.num, j.num))
 				obj.append(rideshare_pen[i.num][j.num][0] + delta * q[j.num] * (1 - y[i.num][j.num]))
 				lb.append(0)
 				ub.append(1)
-				variable_types.append("B")
+				variable_types.append("C")
 
 		#Set constraints
 		constraint_names = []
 		constraints = []
 		constraint_rhs = []
 		constraint_sense = []
+
+		#prevents vehicles in V_P to get bugged 
+		for j in V_P:
+			no_2_x_constraint = [[], []]
+			for i in R_prime:
+				no_2_x_constraint[0].append('x({0},{1})'.format(i.num, j.num))
+				no_2_x_constraint[1].append(1)
+				
+			constraint_names.append('vehicle_{0}_no_2_x_constraint'.format(j.num))
+			constraints.append(no_2_x_constraint)
+			constraint_rhs.append(1)
+			constraint_sense.append('E')
+
 
 		for j in V_prime:
 			#makes sure that there's already passenger 1 before rideshare is assigned
@@ -523,7 +559,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			constraint_sense.append('E')
 			
 		#only one reassignment
-		for i in R_A:
+		for i in R_prime:
 			for j in V_prime:
 				one_standard_reassignment_constraint = [[], []]
 				one_standard_reassignment_constraint[0].append('x({0},{1})'.format(i.num, j.num))
@@ -538,8 +574,15 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 		#makes sure we don't kick passengers out of cars they're already in
 		#may need to generate a separate list of xij and x'ij lists to make sure that this is guaranteed to not change; working off comparisons with y list may not work
-		for i in R_prime:
-			for j in V_D:
+		V_joined = set().union(V_D)
+		for vehicle in V_P:
+			if len(vehicle.passengers) == 2:
+				V_joined.add(vehicle)
+
+		print('<' * 40)
+		print(R_IV, V_joined)
+		for i in R_IV:
+			for j in V_joined:
 				no_kick_out_constraint_x = [[], []]
 				no_kick_out_constraint_x[0].append('x({0},{1})'.format(i.num, j.num))
 				no_kick_out_constraint_x[1].append(1)
@@ -547,6 +590,8 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 				constraints.append(no_kick_out_constraint_x)
 				constraint_rhs.append(x_prev[i.num][j.num])
 				constraint_sense.append('E')
+				print('testing', no_kick_out_constraint_x, i.num, j.num, x_prev[i.num][j.num])
+
 
 				no_kick_out_constraint_x_prime = [[], []]
 				no_kick_out_constraint_x_prime[0].append('x_prime({0},{1})'.format(i.num, j.num))
@@ -560,14 +605,16 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		problem.variables.add(obj = obj, lb = lb, ub = ub, names = names, types = variable_types)
 		problem.linear_constraints.add(lin_expr = constraints, senses = constraint_sense, rhs = constraint_rhs, names = constraint_names)
 
+		problem.set_log_stream(None)
 		problem.solve()
+
 		
 		values = problem.solution.get_values()
-		for i in range(len(names)):
-			if 'x(' in names[i]:
-				print(names[i] + '      : ' + str(values[i]))
-			else:
-				print(names[i] + ': ' + str(values[i]))
+		# for i in range(len(names)):
+		# 	if 'x(' in names[i]:
+		# 		print(names[i] + '      : ' + str(values[i]))
+		# 	else:
+		# 		print(names[i] + ': ' + str(values[i]), x_prime_prev)
 
 		print("Total Cost = " + str(problem.solution.get_objective_value()))
 		
@@ -584,31 +631,38 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			v = int(var[second_start: second_end + 1])
 			passenger = R[p]
 			vehicle = V[v]
-			if values[ind] == 1:
-				if passenger in R_A:  
-					if passenger.vehicle != v:
-						print('REASSIGNING')
-						passenger.reassigned = 1
-						if V[passenger.vehicle] in V_P:
-							if len(V[passenger.vehicle].passengers) == 1: #reassigned passenger was reassigned from a single ride (V_P 0)
-								# if p == V[passenger.vehicle].passengers[0]: #means we're not overwriting new information
-								V_I.add(V[passenger.vehicle])
-								V_P.remove(V[passenger.vehicle])
-								V[passenger.vehicle].picking_up = None
-								V[passenger.vehicle].state = 'idle'
-								V[passenger.vehicle].passengers = []
-								V[passenger.vehicle].serving = None
-							else: #reassigned passenger was reassigned from the second passenger of a shared ride (V_P 1)
-								# if p == V[passenger.vehicle].passengers[0]: #means we're not overwriting new information
-								V_D.add(V[passenger.vehicle])
-								V_P.remove(V[passenger.vehicle])
-								V[passenger.vehicle].picking_up = None
-								V[passenger.vehicle].state = 'drop off'
-								V[passenger.vehicle].passengers.pop(1)
-								V[passenger.vehicle].serving = 0
-						else: #reassigned passenger must've come from a vehicle in V_D
-							# if p == V[passenger.vehicle].next:
-							V[passenger.vehicle].next = None
+
+			# if 'x(' in var:
+			# 	print(str(names[ind]), '      : ' , str(values[ind]),  ' ' , str(x_prev[p][v]))
+			# else:
+			# 	print(names[ind] + ': ' + str(values[ind]) + ' ' + str(x_prime_prev[p][v]))
+
+			if passenger in R_prime:
+				if values[ind] == 1:
+					if passenger in R_A:  
+						if passenger.vehicle != v:
+							print('REASSIGNING passenger ' + str(p) + ' to vehicle ' + str(v))
+							passenger.reassigned = 1
+							if V[passenger.vehicle] in V_P:
+								if len(V[passenger.vehicle].passengers) == 1: #reassigned passenger was reassigned from a single ride (V_P 0)
+									# if p == V[passenger.vehicle].passengers[0]: #means we're not overwriting new information
+									V_I.add(V[passenger.vehicle])
+									V_P.remove(V[passenger.vehicle])
+									V[passenger.vehicle].picking_up = None
+									V[passenger.vehicle].state = 'idle'
+									V[passenger.vehicle].passengers = []
+									V[passenger.vehicle].serving = None
+								else: #reassigned passenger was reassigned from the second passenger of a shared ride (V_P 1)
+									# if p == V[passenger.vehicle].passengers[0]: #means we're not overwriting new information
+									V_D.add(V[passenger.vehicle])
+									V_P.remove(V[passenger.vehicle])
+									V[passenger.vehicle].picking_up = None
+									V[passenger.vehicle].state = 'dropping off'
+									V[passenger.vehicle].passengers.pop(1)
+									V[passenger.vehicle].serving = 0
+							else: #reassigned passenger must've come from a vehicle in V_D
+								# if p == V[passenger.vehicle].next:
+								V[passenger.vehicle].next = None
 
 		#takes care of all passenger assignments
 		for ind in range(len(names)): 
@@ -621,39 +675,48 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			v = int(var[second_start: second_end + 1])
 			passenger = R[p]
 			vehicle = V[v]
-			if values[ind] == 1:  
-				R_A.add(passenger)
-				passenger.state = 'assigned'
-				passenger.vehicle = v
-				if passenger in R_U:
-					R_U.remove(passenger)
+			if values[ind] == 1: 
+				print('Passenger ' + str(p) + ' assigned to vehicle ' + str(v))
+				print(names[ind] + ': ' + str(values[ind]))
 
-				if 'x(' in var: #case where a single ride is assigned/reassigned
-					if vehicle in V_I: 
-						V_I.remove(vehicle)
-						V_P.add(vehicle)
+				if passenger in R_prime:
+				 
+					R_A.add(passenger)
+					passenger.state = 'assigned'
+					passenger.vehicle = v
 
-					if vehicle in V_I or vehicle in V_P: #passenger will be picked up immediately next
-						vehicle.passengers = [p]
-						vehicle.picking_up = 0
-						vehicle.serving = 0
-						vehicle.state = 'picking_up'
-													
-					else: #passenger will be picked up after the next passenger is dropped off
-						vehicle.next = p
 					
-				else:
-					print('RIDESHARE')
-					if vehicle in V_P: #when a rideshare gets reassigned to another rideshare
-						vehicle.passengers[1] = p
 
-					else: #when a new rideshare assigned
-						vehicle.passengers.append(p)
+					if passenger in R_U:
+						R_U.remove(passenger)
 
-					V_D.remove(vehicle)
-					V_P.add(vehicle)
-					vehicle.picking_up = 1
-					vehicle.serving = 0 if rideshare_pen[p][v][1] == 0 else 1
+					if 'x(' in var: #case where a single ride is assigned/reassigned
+						if vehicle in V_I: 
+							V_I.remove(vehicle)
+							V_P.add(vehicle)
+
+						if vehicle in V_I or vehicle in V_P: #passenger will be picked up immediately next
+							vehicle.passengers = [p]
+							vehicle.picking_up = 0
+							vehicle.serving = 0
+							vehicle.state = 'picking_up'
+														
+						else: #passenger will be picked up after the next passenger is dropped off
+							vehicle.next = p
+						
+					else:
+						print('RIDESHARE between passenger ' + str(p) + ' and vehicle ' + str(v))
+						if vehicle in V_P: #when a rideshare gets reassigned to another rideshare
+							vehicle.passengers[1] = p
+
+						else: #when a new rideshare assigned
+							vehicle.passengers.append(p)
+
+						V_D.remove(vehicle)
+						V_P.add(vehicle)
+						vehicle.state = 'picking up'
+						vehicle.picking_up = 1
+						vehicle.serving = 0 if rideshare_pen[p][v][1] == 0 else 1
 		
 	#set constants
 	phi = drop_off_pen
@@ -676,7 +739,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			R_U.add(passenger)
 
 	#initiate vehicle sets
-	V, V_I, V_P, V_D = [], set(), set(), set()
+	V, V_I, V_P, V_P_prime, V_D, V_D_prime = [], set(), set(), set(), set(), set()
 	V_prime = V #this is specific to this model; may change so I'm distinguishing V_prime and V
 	for v in range(num_vehicles):
 		vehicle = Vehicle(v, x_max, y_max)
@@ -684,13 +747,19 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		V_I.add(vehicle)
 
 	#loop
+	for passenger in R:
+			print('Passenger #' + str(passenger.num) + ' pos: (' + str(passenger.x) + ',' + str(passenger.y) + ')   dest: ', passenger.d, '   dist: ', point_dist((passenger.x, passenger.y), passenger.d), '  appearing ', passenger.appear)
+
+
 	while t <= T:
 		print('Modeling time = ' + str(t))
-		for passenger in R:
+		for passenger in R_prime:
 			print('Passenger #' + str(passenger.num) + ' pos: (' + str(passenger.x) + ',' + str(passenger.y) + ')   dest: ', passenger.d, '   dist: ', point_dist((passenger.x, passenger.y), passenger.d), '  appearing ', passenger.appear)
 		for vehicle in V:
 			print('Vehicle #' + str(vehicle.num) + ' pos: (' + str(vehicle.x) + ',' + str(vehicle.y) + ')')
-
+		for vehicle in V:
+			if vehicle not in V_I:
+				print('test', vehicle.num, vehicle.passengers, vehicle.next, vehicle.serving, vehicle.picking_up, R[vehicle.passengers[0]].vehicle)
 		
 		update_in_vehicle(R, R_IV, R_S, V_I, V_D)
 		update_assigned(R, R_A, R_IV, V_P, V_D)
@@ -714,11 +783,14 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 		for vehicle in V:
 			for p in vehicle.passengers:
-				print(vehicle, ' ', vehicle.num, ' is serving ', R[p], ' ', R[p].num)
+				print(vehicle, vehicle.num, ' is ' + vehicle.state,  R[p], R[p].num)
 			if vehicle.next is not None:
-				print(vehicle, ' ', vehicle.num, ' will eventually pick up ', R[p], ' ', R[p].num)
+				print(vehicle, vehicle.num, ' will eventually pick up ', R[p], R[p].num)
+		for vehicle in V:
+			if vehicle not in V_I:
+				print(vehicle.num, vehicle.passengers, vehicle.next, vehicle.serving, vehicle.picking_up, R[vehicle.passengers[0]].vehicle)
 
-		update_unassigned(R, R_A, R_IV, R_prime, V, V_P, V_prime, t)
+		solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_prime, t)
 		t += t_int
 		for passenger in R:
 			if passenger.appear <= t and passenger.appear > t - t_int:
@@ -742,7 +814,7 @@ class Passenger:
 		self.reassigned = 0
 		self.wait = 0
 		self.appear = random.random() * time_horizon * 0.3
-		self.appear = 0 #for testing
+		# self.appear = 0 #for testing
 
 class Vehicle:
 	def __init__(self, num, x_max, y_max):
@@ -771,8 +843,8 @@ def point_dist(p1, p2):
 	return math.sqrt(x_d**2 + y_d**2)
 
 #Choose inputs here:
-number_of_passengers = 2
-number_of_vehicles = 1
+number_of_passengers = 15
+number_of_vehicles = 10
 vehicle_speed = 60. #kmh 55 default
 x_size = 10. #km
 y_size = 10. #km
@@ -781,8 +853,8 @@ update_interval = 10. #seconds
 dropoff_reasssignment_penalty = 1.
 reassignment_penalty = 250000. #km * seconds
 waiting_penalty = 20000. #km/seconds
-pass1_distance_pen = 0.8
-pass2_distance_pen = 0.7
+pass1_distance_pen = 1.2
+pass2_distance_pen = 1.1
 
 #simulation is calculated in km and seconds
 vehicle_speed /= 3600. #kms
