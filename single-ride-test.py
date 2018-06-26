@@ -2,6 +2,7 @@ import cplex
 import math
 import random
 import numpy as np
+import sys
 
 
 def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max, time_length, time_interval, drop_off_pen, reassign_pen, wait_pen, pass1_pen = 1, pass2_pen = 1, rideshare_flat_penalty = 25):
@@ -15,7 +16,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 	#account for rideshares then immediate pickup after two dropoffs
 	def solve_R_greaterthan_V(R, R_A, R_IV, R_prime, V, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, V_prime):
 		if len(R_prime) < 1: return
-		# print('GREATER THAN')
+		print('GREATER THAN')
 
 		R_joined = R_prime.union(R_IV)
 
@@ -49,16 +50,20 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 					vehicle = V[j]
 					current_passenger = R[V[j].passengers[0]]
 					considered_passenger = R[i]
-					d11[i][j] = point_dist((vehicle.x, vehicle.y), current_passenger.d) + point_dist(considered_passenger.o, current_passenger.d) - dist_to_d(current_passenger, vehicle)
+					d11[i][j] = point_dist((vehicle.x, vehicle.y), considered_passenger.o) + point_dist(considered_passenger.o, current_passenger.d) - dist_to_d(current_passenger, vehicle)
 					d12[i][j] = point_dist(considered_passenger.o, current_passenger.d) + point_dist(current_passenger.d, considered_passenger.d) - point_dist(considered_passenger.o, considered_passenger.d)
-					d21[i][j] = point_dist((vehicle.x, vehicle.y), current_passenger.d) + point_dist(considered_passenger.o, considered_passenger.d) + point_dist(considered_passenger.d, current_passenger.d) - dist_to_d(current_passenger, vehicle)
-					rideshare_pen[i][j] = [psi1 * d11[i][j] + psi2 * d12[i][j] + d[i][j], 0] if psi1 * d11[i][j] + psi2 * d12[i][j] + d[i][j] < psi1 * d21[i][j] else [psi1 * d21[i][j], 1]
+					d21[i][j] = point_dist((vehicle.x, vehicle.y), considered_passenger.o) + point_dist(considered_passenger.o, considered_passenger.d) + point_dist(considered_passenger.d, current_passenger.d) - dist_to_d(current_passenger, vehicle)
+					# if i == 1 and j == 1:
+					rideshare_pen[i][j] = [psi1 * d11[i][j] + psi2 * d12[i][j] + d[i][j], 0] if psi1 * d11[i][j] + psi2 * d12[i][j] < psi1 * d21[i][j] else [psi1 * d21[i][j] + d[i][j], 1]
+					
+					print('rideshare cost', i, j, d11[i][j], d12[i][j], d21[i][j], 'distance:', d[i][j])
+						# sys.exit("breaking")
 				else:
 					d11[i][j] = 0
 					d12[i][j] = 0
 					d21[i][j] = 0
 					rideshare_pen[i][j] = [0, None]
-		# print('distance weights', d11[1][1], d12[1][1], d21[1][1])
+		# print('distance weights', d11[1][1], d12[1][1] + d[i][j], d21[1][1])
 
 
 		for i in range(num_passengers):
@@ -74,7 +79,9 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			else:
 				x_prime_prev[passenger.num][v] = 1
 
-		seats = min(len(R_joined), len(V_D) + 2 * len(V_D_r) + len(V_P_s) + len(V_I))
+		seats = min(len(R_joined), 2 * len(V_D) + 2 * len(V_P_r) + len(V_P_s) + len(V_I))
+		print(len(R_joined), 2 * len(V_D) + 2 * len(V_P_r) + len(V_P_s) + len(V_I))
+		print('seats filled:', seats)
 
 		#Create new model for |R'| > |V'|
 		problem = cplex.Cplex()
@@ -255,7 +262,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		problem.linear_constraints.add(lin_expr = constraints, senses = constraint_sense, rhs = constraint_rhs, names = constraint_names)
 
 		# problem.set_log_stream(None)
-		# problem.write('test_greater1.lp')
+		problem.write('test_greater1.lp')
 		problem.solve()
 
 		
@@ -266,7 +273,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		# 	else:
 		# 		print(names[i] + ': ' + str(values[i]), x_prime_prev)
 
-		# print("Total Cost = " + str(problem.solution.get_objective_value()))
+		print("Total Cost = " + str(problem.solution.get_objective_value()))
 		
 		#updates sets of assigned passengers and vehicles for the next time step
 
@@ -492,7 +499,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 	def update_unassigned(R, R_A, R_IV, R_prime, V, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, V_prime):
 		if len(R_U) < 1: return
-		solve_R_greaterthan_V(R, R_A, R_IV, R_prime, V, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, V_prime) if len(R_prime) + len(R_IV) > len(V_D) + 2 * len(V_D_r) + len(V_P_s) + len(V_I) else solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, V_prime)
+		solve_R_greaterthan_V(R, R_A, R_IV, R_prime, V, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, V_prime) if len(R_prime) + len(R_IV) > 2 * len(V_D) + 2 * len(V_P_r) + len(V_P_s) + len(V_I) else solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, V_prime)
 
 
 	def solve_R_lessthan_V(R, R_A, R_IV, R_prime, V, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, V_prime):
@@ -531,16 +538,23 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 					vehicle = V[j]
 					current_passenger = R[V[j].passengers[0]]
 					considered_passenger = R[i]
-					d11[i][j] = point_dist((vehicle.x, vehicle.y), current_passenger.d) + point_dist(considered_passenger.o, current_passenger.d) - dist_to_d(current_passenger, vehicle)
+					d11[i][j] = point_dist((vehicle.x, vehicle.y), considered_passenger.o) + point_dist(considered_passenger.o, current_passenger.d) - dist_to_d(current_passenger, vehicle)
 					d12[i][j] = point_dist(considered_passenger.o, current_passenger.d) + point_dist(current_passenger.d, considered_passenger.d) - point_dist(considered_passenger.o, considered_passenger.d)
-					d21[i][j] = point_dist((vehicle.x, vehicle.y), current_passenger.d) + point_dist(considered_passenger.o, considered_passenger.d) + point_dist(considered_passenger.d, current_passenger.d) - dist_to_d(current_passenger, vehicle)
-					rideshare_pen[i][j] = [psi1 * d11[i][j] + psi2 * d12[i][j] + d[i][j], 0] if psi1 * d11[i][j] + psi2 * d12[i][j] + d[i][j] < psi1 * d21[i][j] else [psi1 * d21[i][j], 1]
+					d21[i][j] = point_dist((vehicle.x, vehicle.y), considered_passenger.o) + point_dist(considered_passenger.o, considered_passenger.d) + point_dist(considered_passenger.d, current_passenger.d) - dist_to_d(current_passenger, vehicle)
+					
+					rideshare_pen[i][j] = [psi1 * d11[i][j] + psi2 * d12[i][j] + d[i][j], 0] if psi1 * d11[i][j] + psi2 * d12[i][j] < psi1 * d21[i][j] else [psi1 * d21[i][j] + d[i][j], 1]
+
+					# if i == 1 and j == 1:
+					print('rideshare cost', d11[i][j], d12[i][j], d21[i][j], 'distance:', d[i][j])
+						# sys.exit("breaking")
+
+
 				else:
 					d11[i][j] = 0
 					d12[i][j] = 0
 					d21[i][j] = 0
 					rideshare_pen[i][j] = [0, None]
-		# print('distance weights', d11[1][1], d12[1][1], d21[1][1])
+		# print('distance weights', d11[1][1], d12[1][1] + d[i][j], d21[1][1])
 
 
 		for i in range(num_passengers):
@@ -555,6 +569,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			else:
 				x_prime_prev[passenger.num][v] = 1
 
+		seats = min(len(R_joined), 2 * len(V_D) + 2 * len(V_P_r) + len(V_P_s) + len(V_I))
 
 		#Verifying that things were initialized properly
 
@@ -668,6 +683,18 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			constraints.append(passenger_assigned_constraint)
 			constraint_rhs.append(1)
 			constraint_sense.append('E')
+
+		print('seats', seats)
+		max_seats_constraint = [[], []]
+		for i in R_joined:
+			for j in V_prime:
+				max_seats_constraint[0].extend(['x({0},{1})'.format(i.num, j.num),'x_prime({0},{1})'.format(i.num, j.num)])
+				max_seats_constraint[1].extend([1,1])
+
+		constraint_names.append('max_seats_used_constraint')
+		constraints.append(max_seats_constraint)
+		constraint_rhs.append(seats)
+		constraint_sense.append('E')
 			
 		#only one reassignment
 		for i in R_joined:
@@ -703,6 +730,9 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 		# print('<' * 40)
 		# print(R_IV, V_joined)
+
+
+		#need to consider for when 1 is dropped off from a rideshare and 2 -> 1
 		for i in R_IV:
 			for j in V_joined:
 				no_kick_out_constraint_x = [[], []]
@@ -801,8 +831,8 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			passenger = R[p]
 			vehicle = V[v]
 			if values[ind] == 1: 
-				# print('Passenger ' + str(p) + ' assigned to vehicle ' + str(v))
-				# print(names[ind] + ': ' + str(values[ind]))
+				print('Passenger ' + str(p) + ' assigned to vehicle ' + str(v))
+				print(names[ind] + ': ' + str(values[ind]))
 
 				if passenger in R_prime:
 				 
@@ -906,13 +936,13 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 	while t <= T:
 		print('Modeling time = ' + str(t))
-		for passenger in R_prime:
-			print('Passenger #' + str(passenger.num) + ' pos: (' + str(passenger.x) + ',' + str(passenger.y) + ')   dest: ', passenger.d, '   dist: ', point_dist((passenger.x, passenger.y), passenger.d), '  appearing ', passenger.appear)
-		for vehicle in V:
-			print('Vehicle #' + str(vehicle.num) + ' pos: (' + str(vehicle.x) + ',' + str(vehicle.y) + ')')
-		for vehicle in V:
-			if vehicle not in V_I:
-				print('test', vehicle.num, vehicle.passengers, vehicle.next, vehicle.serving, vehicle.picking_up, R[vehicle.passengers[0]].vehicle)
+		# for passenger in R_prime:
+		# 	print('Passenger #' + str(passenger.num) + ' pos: (' + str(passenger.x) + ',' + str(passenger.y) + ')   dest: ', passenger.d, '   dist: ', point_dist((passenger.x, passenger.y), passenger.d), '  appearing ', passenger.appear)
+		# for vehicle in V:
+		# 	print('Vehicle #' + str(vehicle.num) + ' pos: (' + str(vehicle.x) + ',' + str(vehicle.y) + ')')
+		# for vehicle in V:
+		# 	if vehicle not in V_I:
+		# 		print('test', vehicle.num, vehicle.passengers, vehicle.next, vehicle.serving, vehicle.picking_up, R[vehicle.passengers[0]].vehicle)
 		
 		# V_P = V_P_s.union(V_P_r)
 		# V_D = V_D_s.union(V_P_r)
@@ -973,8 +1003,8 @@ class Passenger:
 		self.vehicle = None #vehicle number that is serving it; not the vehicle object!
 		self.reassigned = 0
 		self.wait = 0
-		self.appear = random.random() * time_horizon * 0.3 + 300
-		# self.appear = 0 #for testing
+		self.appear = random.random() * time_horizon * 0.3
+		self.appear = 0 #for testing
 
 class Vehicle:
 	def __init__(self, num, x_max, y_max):
@@ -1004,19 +1034,19 @@ def point_dist(p1, p2):
 	return math.sqrt(x_d**2 + y_d**2)
 
 #Choose inputs here:
-number_of_passengers = 2
-number_of_vehicles = 1
+number_of_passengers = 10
+number_of_vehicles = 5
 vehicle_speed = 60. #kmh 55 default
 x_size = 10. #km
 y_size = 10. #km
 run_horizon = 1. #hours
 update_interval = 10. #seconds
-dropoff_reasssignment_penalty = 0.8
+dropoff_reasssignment_penalty = 1
 reassignment_penalty = 1. #km * seconds
 waiting_penalty = .2 #km/seconds
-pass1_distance_pen = 0.9
-pass2_distance_pen = 0.8
-rideshare_flat_penalty = 1
+pass1_distance_pen = 1.1
+pass2_distance_pen = 1.05
+rideshare_flat_penalty = 0.8
 
 #simulation is calculated in km and seconds
 vehicle_speed /= 3600. #kms
