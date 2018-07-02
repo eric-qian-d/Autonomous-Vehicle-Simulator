@@ -6,7 +6,7 @@ import sys
 import csv
 
 
-def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max, time_length, time_interval, drop_off_pen, reassign_pen, wait_pen, pass1_pen = 1, pass2_pen = 1, rideshare_flat_penalty = 25, rideshare = True):
+def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max, time_length, time_interval, drop_off_pen, reassign_pen, wait_pen, pass1_pen = 1, pass2_pen = 1, rideshare_flat_penalty = 25, rideshare = True, rideshare_bonus = 2):
 	random.seed(12)
 	'''
 	Simulates a dynamic system for the specified length of time using the given inputs, updating information at every time interval. Returns
@@ -17,22 +17,18 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 	#account for rideshares then immediate pickup after two dropoffs
 
 	def update_in_vehicle(R, R_IV, R_IV_1, R_IV_2, R_S, V_I, V_D, V_D_s, V_D_r, V_has_next): #need to consider order of dropoff for rideshares; FIX!
-		if len(R_IV) == 0: return 0
+		if len(R_IV) == 0: return
 		# print('In the in vehicle update function')
-		
-		total = 0
 
 		v_done, r_done = [], []
 		for vehicle in V_D:
 			passenger = R[vehicle.passengers[vehicle.serving]]
 			if dist_to_d(passenger, vehicle) < distance_travel:
-				total += dist_to_d(passenger, vehicle)
 				vehicle.x, vehicle.y = passenger.d[0], passenger.d[1]
 				v_done.append(vehicle)
 				r_done.append(passenger)
 				vehicle.in_vehicle.pop(vehicle.serving)
 			else:
-				total += distance_travel
 				x_comp = abs(vehicle.x - passenger.d[0])/(abs(vehicle.x - passenger.d[0]) + abs(vehicle.y - passenger.d[1]))
 				y_comp = 1 - x_comp
 				theta = math.atan(y_comp/(x_comp + 0.001))
@@ -85,31 +81,23 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			else:
 				R_IV_2.remove(passenger)
 
-		return total
+	def update_assigned(R, R_A, R_IV, R_IV_1, R_IV_2, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r):
+		if len(R_A) == 0: return 0 
 
-	def update_assigned(R, R_A, R_IV, R_IV_1, R_IV_2, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, t):
-		if len(R_A) == 0: return 0, 0
-
-		empty_km_1 = 0.
-		empty_km_2 = 0.
+		empty_km = 0.
 		# print('In the assigned update function')
 
 		v_done, r_done = [], []
 		for vehicle in V_P:
 			passenger = R[vehicle.passengers[vehicle.picking_up]]
 			if distance(passenger, vehicle) < distance_travel:
-				empty_km_1 += distance(passenger, vehicle) #diagnostic
-				if vehicle in V_P_s:
-					empty_km_2 += distance(passenger, vehicle)
+				empty_km += distance(passenger, vehicle) #diagnostic
 				vehicle.x, vehicle.y = passenger.o[0], passenger.o[1]
 				v_done.append(vehicle)
 				r_done.append(passenger)
 				vehicle.in_vehicle.append(vehicle.picking_up)
-				passenger.picked_up = t
 			else:
-				empty_km_1 += distance_travel
-				if vehicle in V_P_s:
-					empty_km_2 += distance_travel
+				empty_km += distance_travel
 				x_comp = abs(vehicle.x - passenger.o[0])/(abs(vehicle.x - passenger.o[0]) + abs(vehicle.y - passenger.o[1]))
 				y_comp = 1 - x_comp
 				theta = math.atan(y_comp/(x_comp + 0.001))
@@ -145,7 +133,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			else:
 				R_IV_2.add(passenger)
 
-		return empty_km_1, empty_km_2
+		return empty_km
 
 	def update_unassigned(R, R_A, R_IV, R_IV_1, R_IV_2, R_prime, V, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, V_prime, V_has_next):
 		if len(R_U) < 1: return
@@ -190,7 +178,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 					d11[i][j] = point_dist((vehicle.x, vehicle.y), considered_passenger.o) + point_dist(considered_passenger.o, current_passenger.d) - dist_to_d(current_passenger, vehicle)
 					d12[i][j] = point_dist(considered_passenger.o, current_passenger.d) + point_dist(current_passenger.d, considered_passenger.d) - point_dist(considered_passenger.o, considered_passenger.d)
 					d21[i][j] = point_dist((vehicle.x, vehicle.y), considered_passenger.o) + point_dist(considered_passenger.o, considered_passenger.d) + point_dist(considered_passenger.d, current_passenger.d) - dist_to_d(current_passenger, vehicle)					
-					rideshare_pen[i][j] = [psi1 * (d11[i][j] + distance(considered_passenger, vehicle)) + psi2 * d12[i][j] , 0] if psi1 * d11[i][j] + psi2 * d12[i][j] < psi1 * d21[i][j] else [psi1 * (d21[i][j] + distance(considered_passenger, vehicle)), 1]
+					rideshare_pen[i][j] = [psi1 * (d11[i][j] + distance(considered_passenger, vehicle)) + psi2 * d12[i][j] - (psi1 + psi2)* epsilon * point_dist(considered_passenger.o, current_passenger.d) , 0] if psi1 * d11[i][j] + psi2 * d12[i][j] - (psi1 + psi2)* epsilon * point_dist(considered_passenger.o, current_passenger.d) < psi1 * d21[i][j] - (psi1 + psi2)* epsilon * point_dist(considered_passenger.o, considered_passenger.d) else [psi1 * (d21[i][j] + distance(considered_passenger, vehicle)) - (psi1 + psi2)* epsilon * point_dist(considered_passenger.o, considered_passenger.d), 1]
 				else:
 					d11[i][j] = 0
 					d12[i][j] = 0
@@ -509,7 +497,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 					d11[i][j] = point_dist((vehicle.x, vehicle.y), considered_passenger.o) + point_dist(considered_passenger.o, current_passenger.d) - dist_to_d(current_passenger, vehicle)
 					d12[i][j] = point_dist(considered_passenger.o, current_passenger.d) + point_dist(current_passenger.d, considered_passenger.d) - point_dist(considered_passenger.o, considered_passenger.d)
 					d21[i][j] = point_dist((vehicle.x, vehicle.y), considered_passenger.o) + point_dist(considered_passenger.o, considered_passenger.d) + point_dist(considered_passenger.d, current_passenger.d) - dist_to_d(current_passenger, vehicle)
-					rideshare_pen[i][j] = [psi1 * (d11[i][j] + distance(considered_passenger, vehicle)) + psi2 * d12[i][j] , 0] if psi1 * d11[i][j] + psi2 * d12[i][j] < psi1 * d21[i][j] else [psi1 * (d21[i][j] + distance(considered_passenger, vehicle)), 1]
+					rideshare_pen[i][j] = [psi1 * (d11[i][j] + distance(considered_passenger, vehicle)) + psi2 * d12[i][j] - (psi1 + psi2)* epsilon * point_dist(considered_passenger.o, current_passenger.d) , 0] if psi1 * d11[i][j] + psi2 * d12[i][j] - (psi1 + psi2)* epsilon * point_dist(considered_passenger.o, current_passenger.d) < psi1 * d21[i][j] - (psi1 + psi2)* epsilon * point_dist(considered_passenger.o, considered_passenger.d) else [psi1 * (d21[i][j] + distance(considered_passenger, vehicle)) - (psi1 + psi2)* epsilon * point_dist(considered_passenger.o, considered_passenger.d), 1]
 				else:
 					d11[i][j] = 0
 					d12[i][j] = 0
@@ -816,19 +804,16 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 
 	def update_in_vehicle_s(R, R_IV, R_S, V_I, V_D): #need to consider order of dropoff for rideshares; FIX!
-		if len(R_IV) == 0: return 0
+		if len(R_IV) == 0: return
 		# print('In the in vehicle update function')
-		total = 0
 		v_done, r_done = [], []
 		for vehicle in V_D:
 			passenger = R[vehicle.passengers[vehicle.serving]]
 			if dist_to_d(passenger, vehicle) < distance_travel:
-				total += dist_to_d(passenger, vehicle)
 				vehicle.x, vehicle.y = passenger.d[0], passenger.d[1]
 				v_done.append(vehicle)
 				r_done.append(passenger)
 			else:
-				total += distance_travel
 				x_comp = abs(vehicle.x - passenger.d[0])/(abs(vehicle.x - passenger.d[0]) + abs(vehicle.y - passenger.d[1]))
 				y_comp = 1 - x_comp
 				theta = math.atan(y_comp/(x_comp + 0.001))
@@ -864,29 +849,23 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			passenger.state = 'served'
 			passenger.vehicle = None
 
-		return total
+	def update_assigned_s(R, R_A, R_IV, V_P, V_D):
+		if len(R_A) == 0: return 0
 
-	def update_assigned_s(R, R_A, R_IV, V_P, V_D, t):
-		if len(R_A) == 0: return 0, 0
-
-		empty_km_1 = 0
-		empty_km_2 = 0
+		empty_km = 0
 		# print('In the assigned update function')
 		v_done, r_done = [], []
 		for vehicle in V_P:
 			# print(vehicle.num, vehicle.passengers, vehicle.next, vehicle.serving, vehicle.picking_up, R[vehicle.passengers[0]].vehicle)
 			passenger = R[vehicle.passengers[vehicle.picking_up]]
 			if distance(passenger, vehicle) < distance_travel:
-				empty_km_1 += distance(passenger, vehicle) #diagnostic
-				empty_km_2 += distance(passenger, vehicle)
+				empty_km += distance(passenger, vehicle) #diagnostic
 				vehicle.x, vehicle.y = passenger.o[0], passenger.o[1]
 				v_done.append(vehicle)
 				r_done.append(passenger)
-				passenger.picked_up = t
 
 			else:
-				empty_km_1 += distance_travel #diagnostic
-				empty_km_2 += distance_travel
+				empty_km += distance_travel #diagnostic
 				x_comp = abs(vehicle.x - passenger.o[0])/(abs(vehicle.x - passenger.o[0]) + abs(vehicle.y - passenger.o[1]))
 				y_comp = 1 - x_comp
 				theta = math.atan(y_comp/(x_comp + 0.001))
@@ -908,7 +887,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			R_prime.remove(passenger)
 			passenger.state = 'in vehicle'
 
-		return empty_km_1, empty_km_2
+		return empty_km
 
 	def update_unassigned_s(R, R_A, R_IV, R_prime, V, V_P, V_prime):
 		if len(R_U) < 1: return
@@ -1352,9 +1331,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 
 
-	empty_km_1 = 0.0 #includes all empty vehicles and rideshares going to pick up passenger 2
-	empty_km_2 = 0.0 #only includes empty vehicles
-	total_km = 0.0
+	empty_km = 0.0
 
 	#set constants
 	phi = drop_off_pen
@@ -1366,6 +1343,7 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 	t = time_interval
 	t_int = time_interval
 	distance_travel = t_int * vehicle_speed
+	epsilon = rideshare_bonus
 
 	#initiate passenger sets
 	R, R_U, R_A, R_IV, R_IV_1, R_IV_2, R_S, R_prime = [], set(), set(), set(), set(), set(), set(), set()
@@ -1414,11 +1392,9 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		
 		if rideshare:
 		
-			total_km += update_in_vehicle(R, R_IV, R_IV_1, R_IV_2, R_S, V_I, V_D, V_D_s, V_D_r, V_has_next)
-			e1, e2 = update_assigned(R, R_A, R_IV, R_IV_1, R_IV_2, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r, t)
-			empty_km_1 += e1
-			empty_km_2 += e2
-			total_km += e1
+			update_in_vehicle(R, R_IV, R_IV_1, R_IV_2, R_S, V_I, V_D, V_D_s, V_D_r, V_has_next)
+			empty_km += update_assigned(R, R_A, R_IV, R_IV_1, R_IV_2, V_P, V_P_s, V_P_r, V_D, V_D_s, V_D_r)
+
 			# print('POST')
 			# print('R_U' , R_U)
 			# print('R_A' , R_A)
@@ -1441,11 +1417,9 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 			# print('V_prime', V_prime)
 			# print('V_has_next', V_has_next)
 		else:
-			total_km += update_in_vehicle_s(R, R_IV, R_S, V_I, V_D)
-			e1, e2 = update_assigned_s(R, R_A, R_IV, V_P, V_D, t)
-			empty_km_1 += e1
-			empty_km_2 += e2
-			total_km += e1
+			update_in_vehicle_s(R, R_IV, R_S, V_I, V_D)
+			empty_km += update_assigned_s(R, R_A, R_IV, V_P, V_D)
+
 
 			# print('POST')
 			# print('R_U' , R_U)
@@ -1486,17 +1460,9 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		if len(R_S) == len(R):
 			break
 
-	wait_times = []
-	overall_average = 0
-	for passenger in R:
-		wait_times.append(passenger.wait)
-		overall_average += passenger.picked_up
-
-	overall_average /= len(R)
-
 	print('finished')
-	print('time to finish: ' + str(t) + ', passengers served: ' + str(len(R_S)) + ', empty km 1 driven: ' + str(empty_km_1) + ', empty km 2 driven: ' + str(empty_km_2) + ', total km driven ' + str(total_km))
-	return t, len(R_S), empty_km_1, empty_km_2, total_km, overall_average, wait_times
+	print('time to finish: ' + str(t) + ', passengers served: ' + str(len(R_S)) + ', empty km driven: ' + str(empty_km))
+	return t, len(R_S), empty_km
 
 class Passenger:
 	def __init__(self, num, x_max, y_max, time_horizon):
@@ -1511,7 +1477,6 @@ class Passenger:
 		self.wait = 0
 		self.appear = random.random() * time_horizon 
 		self.appear = 0 #for testing
-		self.picked_up = 0
 
 class Vehicle:
 	def __init__(self, num, x_max, y_max):
@@ -1540,9 +1505,9 @@ def point_dist(p1, p2):
 	y_d = p1[1] - p2[1]
 	return math.sqrt(x_d**2 + y_d**2)
 
-#Choose inputs here
-number_of_passengers = 93
-number_of_vehicles = 40
+#Choose inputs here:
+number_of_passengers = 99
+number_of_vehicles = 31
 vehicle_speed = 60. #kmh 55 default
 x_size = 10. #km
 y_size = 10. #km
@@ -1550,83 +1515,76 @@ run_horizon = 2. #hours
 update_interval = 10. #seconds
 dropoff_reasssignment_penalty = 1
 reassignment_penalty = 1. #km * seconds
-waiting_penalty = .05 #km/seconds
+waiting_penalty = .03 #km/seconds
 pass1_distance_pen = 2.1
 pass2_distance_pen = 2
 rideshare_flat_penalty = 5
+rideshare_bonus = 0.
 rideshare = True 
 
 #simulation is calculated in km and seconds
 vehicle_speed /= 3600. #kms
 run_horizon *= 3600. #s
 
-# time, served, empty1, empty2, total, average_waits, waits = simulate_rideshare(number_of_passengers, number_of_vehicles, vehicle_speed, x_size, y_size, run_horizon, update_interval, dropoff_reasssignment_penalty, reassignment_penalty, waiting_penalty, pass1_distance_pen, pass2_distance_pen, rideshare_flat_penalty, rideshare)
+time, served, empty = simulate_rideshare(number_of_passengers, number_of_vehicles, vehicle_speed, x_size, y_size, run_horizon, update_interval, dropoff_reasssignment_penalty, reassignment_penalty, waiting_penalty, pass1_distance_pen, pass2_distance_pen, rideshare_flat_penalty, rideshare, rideshare_bonus)
 
-# passengers_used = []
-# vehicles_used = []
-# vehicle_speed_used = []
-# sim_x_size_used = []
-# sim_y_size_used = []
-# run_horizon_used = []
-# update_interval_used = []
-# dropoff_reasssignment_penalty_used = []
-# reassignment_penalty_used = []
-# waiting_penalty_used = []
-# pass1_distance_pen_used = []
-# pass2_distance_pen_used = []
-# rideshare_flat_penalty_used = []
-# rideshare_allowed = []
+passengers_used = []
+vehicles_used = []
+vehicle_speed_used = []
+sim_x_size_used = []
+sim_y_size_used = []
+run_horizon_used = []
+update_interval_used = []
+dropoff_reasssignment_penalty_used = []
+reassignment_penalty_used = []
+waiting_penalty_used = []
+pass1_distance_pen_used = []
+pass2_distance_pen_used = []
+rideshare_flat_penalty_used = []
+rideshare_bonus_used = []
+rideshare_allowed = []
 
-# variables = [passengers_used, vehicles_used, vehicle_speed_used, sim_x_size_used, sim_y_size_used, run_horizon_used, 
-# 			update_interval_used, dropoff_reasssignment_penalty_used, reassignment_penalty_used, waiting_penalty_used,
-# 			pass1_distance_pen_used, pass2_distance_pen_used, rideshare_flat_penalty_used, rideshare_allowed]
+variables = [passengers_used, vehicles_used, vehicle_speed_used, sim_x_size_used, sim_y_size_used, run_horizon_used, 
+			update_interval_used, dropoff_reasssignment_penalty_used, reassignment_penalty_used, waiting_penalty_used,
+			pass1_distance_pen_used, pass2_distance_pen_used, rideshare_flat_penalty_used, rideshare_bonus_used, rideshare_allowed]
 
-# run_time = []
-# num_served = []
-# empty_km_1 = []
-# empty_km_2 = []
-# total_km = []
-# averages = []
-# wait_times = []
+run_time = []
+num_served = []
+empty_km = []
 
 
+results = [run_time, num_served, empty_km]
 
-# results = [run_time, num_served, empty_km_1, empty_km_2, total_km, averages, wait_times]
-
-# passengers_used.append(number_of_passengers)
-# vehicles_used.append(number_of_vehicles)
-# vehicle_speed_used.append(vehicle_speed)
-# sim_x_size_used.append(x_size)
-# sim_y_size_used.append(y_size)
-# run_horizon_used.append(run_horizon)
-# update_interval_used.append(update_interval)
-# dropoff_reasssignment_penalty_used.append(dropoff_reasssignment_penalty)
-# reassignment_penalty_used.append(reassignment_penalty)
-# waiting_penalty_used.append(waiting_penalty)
-# pass1_distance_pen_used.append(pass1_distance_pen)
-# pass2_distance_pen_used.append(pass2_distance_pen)
-# rideshare_flat_penalty_used.append(rideshare_flat_penalty)
-# rideshare_allowed.append(rideshare)
-# run_time.append(time)
-# num_served.append(served)
-# empty_km_1.append(empty1)
-# empty_km_2.append(empty2)
-# total_km.append(total)
-# averages.append(average_waits)
-# wait_times.append(waits)
+passengers_used.append(number_of_passengers)
+vehicles_used.append(number_of_vehicles)
+vehicle_speed_used.append(vehicle_speed)
+sim_x_size_used.append(x_size)
+sim_y_size_used.append(y_size)
+run_horizon_used.append(run_horizon)
+update_interval_used.append(update_interval)
+dropoff_reasssignment_penalty_used.append(dropoff_reasssignment_penalty)
+reassignment_penalty_used.append(reassignment_penalty)
+waiting_penalty_used.append(waiting_penalty)
+pass1_distance_pen_used.append(pass1_distance_pen)
+pass2_distance_pen_used.append(pass2_distance_pen)
+rideshare_flat_penalty_used.append(rideshare_flat_penalty)
+rideshare_bonus_used.append(rideshare_bonus)
+rideshare_allowed.append(rideshare)
+run_time.append(time)
+num_served.append(served)
+empty_km.append(empty)
 
 
-# with open ('csvfile.csv','a') as file:
-# 	writer = csv.writer(file)
-# 	temp = ['passengers', 'vehicles', 'vehicle speed', 'x-dim', 'y-dim', 'time horizon', 'update interval', 'immediate pickup penalty', 
-# 	'reassignment penalty', 'waiting penalty', 'pass1 penalty', 'pass2 penalty', 'rideshare flat penalty', 'rideshares', 'run time', 
-# 	'number served', 'empty km 1', 'empty km 2', 'total km', 'average wait', 'wait times']
-# 	writer.writerow(temp)
+with open ('csvfile.csv','a') as file:
+	writer = csv.writer(file)
+	# temp = ['passengers', 'vehicles', 'vehicle speed', 'x-dim', 'y-dim', 'time horizon', 'update interval', 'immediate pickup penalty', 
+	# 'reassignment penalty', 'waiting penalty', 'pass1 penalty', 'pass2 penalty', 'rideshare flat penalty', 'rideshare bonus', 'rideshares', 'run time', 'number served', 'empty km']
+	# writer.writerow(temp)
 
-# 	for i in range(len(variables[0])):
-# 		res = []
-# 		for j in range(len(variables)):
-# 			res.append(str(variables[j][i]))
-# 		for j in range(len(results)):
-# 			res.append(str(results[j][i]))
-# 		writer.writerow(res)
+	for i in range(len(variables[0])):
+		res = []
+		for j in range(len(variables)):
+			res.append(str(variables[j][i]))
+		for j in range(len(results)):
+			res.append(str(results[j][i]))
+		writer.writerow(res)
