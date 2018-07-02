@@ -102,7 +102,7 @@ with open ('weights.csv','a') as file:
 # 	vehicles = 20
 
 p1 = 1.
-p2 = 1.
+p2 = 1.2
 flat = 1.
 
 

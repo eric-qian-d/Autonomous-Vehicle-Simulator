@@ -8,6 +8,7 @@ import csv
 
 def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max, time_length, time_interval, drop_off_pen, reassign_pen, wait_pen, pass1_pen = 1, pass2_pen = 1, rideshare_flat_penalty = 25, rideshare = True):
 	random.seed(12)
+	# cplex.setOut(env.getNullStream())
 	'''
 	Simulates a dynamic system for the specified length of time using the given inputs, updating information at every time interval. Returns
 	the total amount of time waited
@@ -361,6 +362,8 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		problem.linear_constraints.add(lin_expr = constraints, senses = constraint_sense, rhs = constraint_rhs, names = constraint_names)
 
 		problem.set_log_stream(None)
+		problem.set_results_stream(None)
+		problem.set_error_stream(None)
 		# problem.write('test2.lp')
 		problem.solve()
 		
@@ -686,6 +689,8 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 		problem.set_log_stream(None)
 		# problem.write('test_greater1.lp')
+		problem.set_error_stream(None)
+		problem.set_results_stream(None)
 		problem.solve()
 		
 		values = problem.solution.get_values()
@@ -1042,6 +1047,8 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 		problem.linear_constraints.add(lin_expr = constraints, senses = constraint_sense, rhs = constraint_rhs, names = constraint_names)
 
 		problem.set_log_stream(None)
+		problem.set_results_stream(None)
+		problem.set_error_stream(None)
 		problem.solve()
 		
 		values = problem.solution.get_values()
@@ -1267,6 +1274,8 @@ def simulate_rideshare(num_passengers, num_vehicles, vehicle_speed, x_max, y_max
 
 
 		problem.set_log_stream(None)
+		problem.set_results_stream(None)
+		problem.set_error_stream(None)
 		problem.solve()
 		
 		values = problem.solution.get_values()
